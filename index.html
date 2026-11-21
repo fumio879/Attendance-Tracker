@@ -1,0 +1,2270 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>出欠管理・共有ボード</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --ink: #1e293b;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --primary-soft: #eff6ff;
+    --ok: #16a34a;
+    --ok-soft: #dcfce7;
+    --warn: #d97706;
+    --warn-soft: #fef3c7;
+    --ng: #dc2626;
+    --ng-soft: #fee2e2;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Meiryo", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.5;
+  }
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px 14px 80px;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: var(--card);
+    padding: 14px 18px;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    margin-bottom: 14px;
+  }
+  .title-area h1 {
+    margin: 0;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .sync-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: #ecfdf5;
+    color: #047857;
+  }
+  .sync-status.saving { background: #fffbeb; color: #b45309; }
+  .sync-status.error { background: #fef2f2; color: #b91c1c; }
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .sub {
+    font-size: 0.84rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    padding: 8px 13px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.86rem;
+    transition: 0.15s;
+  }
+  button:hover { background: #f8fafc; }
+  button.primary {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+  }
+  button.primary:hover { background: var(--primary-hover); }
+  button.ok-btn {
+    background: var(--ok);
+    color: #fff;
+    border-color: var(--ok);
+  }
+  button.ok-btn:hover { filter: brightness(0.95); }
+  button.ng-btn {
+    background: var(--ng);
+    color: #fff;
+    border-color: var(--ng);
+  }
+  button.ng-btn:hover { filter: brightness(0.95); }
+  button.warn-btn {
+    background: var(--warn);
+    color: #fff;
+    border-color: var(--warn);
+  }
+  button.warn-btn:hover { filter: brightness(0.95); }
+  button.danger {
+    color: var(--ng);
+    border-color: #fecaca;
+    background: #fff5f5;
+  }
+  button.danger:hover { background: var(--ng-soft); }
+  button.sm { padding: 5px 10px; font-size: 0.8rem; }
+
+  .nav-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .nav-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 1rem;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 640px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .stat.active { outline: 2px solid var(--primary); }
+  .stat .num { font-size: 1.4rem; font-weight: 700; }
+  .stat .lbl { font-size: 0.78rem; color: var(--muted); }
+  .stat.ok .num { color: var(--ok); }
+  .stat.ng .num { color: var(--ng); }
+  .stat.warn .num { color: var(--warn); }
+
+  .form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  input[type="text"], select, textarea {
+    font: inherit;
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ink);
+  }
+  input[type="text"]:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+  }
+
+  /* 横並び出欠ボタングループ（モバイル最適化） */
+  .mark-group {
+    display: inline-flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 4px;
+    align-items: center;
+  }
+  .mark-btn {
+    min-width: 40px;
+    height: 34px;
+    padding: 0 10px;
+    font-weight: 700;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+  }
+  .mark-btn.sel-o { background: var(--ok-soft); color: var(--ok); border-color: #86efac; }
+  .mark-btn.sel-x { background: var(--ng-soft); color: var(--ng); border-color: #fca5a5; }
+  .mark-btn.sel-d { background: var(--warn-soft); color: var(--warn); border-color: #fcd34d; }
+
+  /* 階層アコーディオンUI（大 -> 中 -> 小） */
+  .acc-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  details.acc-node {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    overflow: hidden;
+  }
+  details.acc-node.lvl-mid {
+    margin: 6px 10px 8px 18px;
+    background: #fafbfc;
+  }
+  details.acc-node.lvl-small {
+    margin: 6px 10px 8px 18px;
+    background: #ffffff;
+  }
+  summary.acc-summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 10px 12px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    user-select: none;
+  }
+  summary.acc-summary::-webkit-details-marker { display: none; }
+  .acc-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 0.92rem;
+  }
+  .acc-caret {
+    display: inline-block;
+    font-size: 0.72rem;
+    color: var(--muted);
+    transition: transform 0.15s;
+  }
+  details.acc-node[open] > summary .acc-caret {
+    transform: rotate(90deg);
+  }
+  .acc-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .acc-filter-btn {
+    padding: 3px 8px;
+    font-size: 0.75rem;
+    border-radius: 6px;
+  }
+  .acc-filter-btn.selected {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+  }
+  .acc-body {
+    padding-bottom: 6px;
+    border-top: 1px solid #f1f5f9;
+  }
+  .acc-leaf-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px 8px 22px;
+    border-top: 1px solid #f1f5f9;
+  }
+  .acc-leaf-row:first-child { border-top: none; }
+
+  .cnt-chip { padding: 2px 8px; border-radius: 999px; font-size: 0.76rem; font-weight: 700; }
+  .cnt-o { background: var(--ok-soft); color: var(--ok); }
+  .cnt-x { background: var(--ng-soft); color: var(--ng); }
+  .cnt-d { background: var(--warn-soft); color: var(--warn); }
+
+  /* グループ階層管理ページ（独立ビュー） */
+  .editor-cols {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 780px) {
+    .editor-cols { grid-template-columns: 1fr; }
+  }
+  .editor-box {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    background: #fafbfc;
+  }
+  .editor-node-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    font-size: 0.85rem;
+  }
+  .link-panel {
+    border: 1px solid #bfdbfe;
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+  }
+  .check-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .check-tile {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 0.84rem;
+    cursor: pointer;
+  }
+  .tree-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .tree-pill {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  /* 一括操作バー */
+  .bulk-action-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 9px 12px;
+    margin-bottom: 12px;
+  }
+
+  /* 名簿グループ枠＆モバイル最適化カード／テーブル */
+  details.group-box {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-bottom: 12px;
+    background: #fff;
+    overflow: hidden;
+  }
+  summary.group-summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 10px 12px;
+    background: #f8fafc;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-weight: 700;
+    user-select: none;
+  }
+  summary.group-summary::-webkit-details-marker { display: none; }
+  .group-summary-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .group-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+  }
+
+  .member-list-rows {
+    display: flex;
+    flex-direction: column;
+  }
+  .member-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 9px 12px;
+    border-top: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+  .member-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 140px;
+    flex: 1;
+  }
+  .member-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .member-name {
+    font-weight: 700;
+    font-size: 0.94rem;
+    word-break: break-word;
+  }
+  .member-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .group-badge {
+    background: var(--primary-soft);
+    color: var(--primary);
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.74rem;
+  }
+  .member-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-left: auto;
+  }
+
+  @media (max-width: 640px) {
+    .member-row {
+      padding: 8px 10px;
+      gap: 6px;
+    }
+    .member-main {
+      flex: 1 1 auto;
+      min-width: 110px;
+    }
+    .member-controls {
+      flex: 0 0 auto;
+      gap: 4px;
+    }
+    .mark-btn {
+      min-width: 36px;
+      height: 32px;
+      padding: 0 8px;
+      font-size: 0.88rem;
+    }
+  }
+
+  .tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 8px;
+  }
+  .tab.active {
+    background: var(--primary-soft);
+    color: var(--primary);
+    border-color: #bfdbfe;
+  }
+
+  .proj-item {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    background: #fafbfc;
+  }
+  .link-box {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .link-box input {
+    font-size: 0.8rem;
+    padding: 5px 8px;
+    min-width: 240px;
+    background: #fff;
+  }
+  .dropzone {
+    border: 2px dashed #cbd5e1;
+    border-radius: 10px;
+    padding: 14px;
+    text-align: center;
+    background: #fafbfc;
+    margin-bottom: 10px;
+  }
+  .muted { color: var(--muted); font-size: 0.84rem; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title-area">
+      <h1>
+        <span id="appTitle">出欠管理・共有ボード</span>
+        <span class="sync-status" id="syncStatus"><span class="dot"></span><span id="syncText">接続中...</span></span>
+      </h1>
+      <div class="sub hidden" id="adminSub">イベントごとのプロジェクト作成・リンク発行管理</div>
+    </div>
+    <div class="actions" id="headerActions">
+      <button id="btnCopyShareLink" class="primary hidden">共有リンクをコピー</button>
+    </div>
+  </header>
+
+  <!-- 1. 管理者ページ -->
+  <section id="adminSection">
+    <div class="card">
+      <h2>新規プロジェクト作成</h2>
+      <div class="form-row">
+        <input type="text" id="newProjName" placeholder="プロジェクト名（例：11/23 交流イベント）" style="min-width:220px;flex:1;">
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:0.9rem;">
+          <input type="checkbox" id="newProjGroupEnabled" checked>
+          グループ階層管理を使う
+        </label>
+        <button id="btnCreateProj" class="primary">プロジェクトを作成</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>プロジェクト一覧・専用リンク発行</h2>
+      <div id="projectList"><p class="muted">読み込み中...</p></div>
+    </div>
+  </section>
+
+  <!-- 2. グループ階層管理ページ（独立ビュー） -->
+  <section id="groupManagerSection" class="hidden">
+    <div class="nav-bar">
+      <div class="nav-group">
+        <button type="button" class="primary" id="btnBackToProject">← プロジェクト画面に戻る</button>
+        <button type="button" id="btnGoAdminFromGroupMgr">管理者ページへ</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>グループ階層管理（新規作成・名称変更・階層紐づけ）</h2>
+      <p class="muted" style="margin-top:0;">各階層のグループを追加し、下のチェックボックスで上位グループへの所属を設定できます。</p>
+
+      <div class="editor-cols">
+        <div class="editor-box">
+          <div style="font-weight:700;font-size:0.9rem;margin-bottom:6px;">最上位グループ</div>
+          <div class="form-row" style="margin-bottom:8px;gap:6px;">
+            <input type="text" id="editorNewLarge" placeholder="グループ名を追加" style="flex:1;min-width:110px;padding:6px 8px;font-size:0.84rem;">
+            <button type="button" class="sm primary" id="btnEditorAddLarge">追加</button>
+          </div>
+          <div id="editorLargeList"></div>
+        </div>
+
+        <div class="editor-box">
+          <div style="font-weight:700;font-size:0.9rem;margin-bottom:6px;">中間グループ</div>
+          <div class="form-row" style="margin-bottom:8px;gap:6px;">
+            <input type="text" id="editorNewMid" placeholder="グループ名を追加" style="flex:1;min-width:110px;padding:6px 8px;font-size:0.84rem;">
+            <button type="button" class="sm primary" id="btnEditorAddMid">追加</button>
+          </div>
+          <div id="editorMidList"></div>
+        </div>
+
+        <div class="editor-box">
+          <div style="font-weight:700;font-size:0.9rem;margin-bottom:6px;">末端グループ</div>
+          <div class="form-row" style="margin-bottom:8px;gap:6px;">
+            <input type="text" id="editorNewSmall" placeholder="グループ名を追加" style="flex:1;min-width:110px;padding:6px 8px;font-size:0.84rem;">
+            <button type="button" class="sm primary" id="btnEditorAddSmall">追加</button>
+          </div>
+          <div id="editorSmallList"></div>
+        </div>
+      </div>
+
+      <div class="link-panel">
+        <div class="form-row" style="justify-content:space-between;">
+          <div style="font-weight:700;font-size:0.9rem;">最上位グループへの所属設定</div>
+          <div class="form-row" style="gap:6px;">
+            <select id="editorTargetLarge" style="padding:5px 8px;font-size:0.84rem;"></select>
+            <button type="button" class="sm primary" id="btnSaveLargeMidLinks">所属を保存</button>
+          </div>
+        </div>
+        <div class="muted" style="margin-top:4px;">選択したグループ配下に紐づける中間グループにチェックを入れて保存してください。</div>
+        <div class="check-grid" id="editorMidCheckboxes"></div>
+      </div>
+
+      <div class="link-panel">
+        <div class="form-row" style="justify-content:space-between;">
+          <div style="font-weight:700;font-size:0.9rem;">中間グループへの所属設定</div>
+          <div class="form-row" style="gap:6px;">
+            <select id="editorTargetMid" style="padding:5px 8px;font-size:0.84rem;"></select>
+            <button type="button" class="sm primary" id="btnSaveMidSmallLinks">所属を保存</button>
+          </div>
+        </div>
+        <div class="muted" style="margin-top:4px;">選択したグループ配下に紐づける末端グループにチェックを入れて保存してください。</div>
+        <div class="check-grid" id="editorSmallCheckboxes"></div>
+      </div>
+
+      <div>
+        <div style="font-weight:700;font-size:0.88rem;">現在の登録済みグループ一覧</div>
+        <div class="tree-preview" id="groupMgrTreePreview"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. プロジェクトページ（メイン画面） -->
+  <section id="projectSection" class="hidden">
+    <div class="nav-bar">
+      <div class="nav-group">
+        <button type="button" id="btnOpenGroupManagerPage" class="hidden">グループ階層管理</button>
+        <button type="button" id="btnGoAdminPage">管理者ページへ</button>
+      </div>
+    </div>
+
+    <!-- 全体サマリー -->
+    <div class="stats">
+      <button class="stat active" data-filter="ALL">
+        <div class="num" id="cntAll">0</div>
+        <div class="lbl">総登録人数</div>
+      </button>
+      <button class="stat ok" data-filter="〇">
+        <div class="num" id="cntO">0</div>
+        <div class="lbl">参加（〇）</div>
+      </button>
+      <button class="stat ng" data-filter="×">
+        <div class="num" id="cntX">0</div>
+        <div class="lbl">不参加（×）</div>
+      </button>
+      <button class="stat warn" data-filter="△">
+        <div class="num" id="cntD">0</div>
+        <div class="lbl">未定（△）</div>
+      </button>
+    </div>
+
+    <!-- 階層別出欠サマリー（アコーディオン表示） -->
+    <div id="hierarchySummaryCard" class="card hidden">
+      <div class="form-row" style="justify-content:space-between;margin-bottom:6px;">
+        <h2 style="margin:0;">グループ別出欠サマリー</h2>
+        <button type="button" class="sm" id="btnResetHierFilter">絞り込み解除</button>
+      </div>
+      <div class="muted">グループをタップすると下位グループが展開されます。「絞込」で下の名簿を絞り込めます。</div>
+      <div class="acc-list" id="hierarchyAccordion"></div>
+    </div>
+
+    <!-- 登録フォーム（簡素化：既存グループ選択のみ） -->
+    <div class="card">
+      <div class="tabs">
+        <button class="tab active" data-tab="single">個別入力</button>
+        <button class="tab" data-tab="bulk">一括入力</button>
+      </div>
+
+      <div id="tabSingle">
+        <div class="form-row">
+          <input type="text" id="inpName" placeholder="参加者名（必須）" style="min-width:150px;flex:1;">
+          <div class="mark-group" id="inpMarkGroup">
+            <button type="button" class="mark-btn sel-o" data-mark="〇">〇</button>
+            <button type="button" class="mark-btn" data-mark="×">×</button>
+            <button type="button" class="mark-btn" data-mark="△">△</button>
+          </div>
+          <select id="selGroupSimple" class="hidden" style="min-width:150px;">
+            <option value="">グループを選択</option>
+          </select>
+          <input type="text" id="inpNote" placeholder="備考" style="min-width:140px;flex:1;">
+          <button id="btnAddMember" class="primary">追加</button>
+        </div>
+      </div>
+
+      <div id="tabBulk" class="hidden">
+        <div class="dropzone" id="dropzone">
+          <p style="margin:0 0 8px;">Excel（.xlsx / .xls / .csv）ファイルを選択またはドロップ</p>
+          <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+        </div>
+        <p class="muted" style="margin:0 0 6px;">
+          名前の横に記号（〇 / × / △）や参加・不参加・未定があれば反映し、記号がない行はすべて「△」になります。
+        </p>
+        <textarea id="bulkText" rows="5" style="width:100%;" placeholder="山田太郎 〇&#10;佐藤花子 ×&#10;鈴木一郎&#10;高橋健太 参加"></textarea>
+        <div class="form-row" style="margin-top:8px;">
+          <select id="bulkMode">
+            <option value="upsert">名前一致で上書き＋新規追加</option>
+            <option value="append">すべて新規追加</option>
+            <option value="replace">既存データを全置換</option>
+          </select>
+          <button id="btnApplyBulk" class="primary">一括反映</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 出欠名簿 -->
+    <div class="card">
+      <div class="form-row" style="justify-content:space-between;margin-bottom:10px;">
+        <h2 style="margin:0;">出欠名簿</h2>
+        <div class="form-row" style="gap:6px;">
+          <button type="button" class="sm" id="btnExpandAll">すべて開く</button>
+          <button type="button" class="sm" id="btnCollapseAll">すべて閉じる</button>
+          <input type="text" id="searchName" placeholder="名前・グループ・備考検索" style="width:165px;">
+          <select id="filterGroupSimple" class="hidden">
+            <option value="ALL">すべてのグループ</option>
+          </select>
+          <select id="sortMembersBy">
+            <option value="created_asc">登録順</option>
+            <option value="name_asc">名前順</option>
+            <option value="mark_order">出欠順</option>
+            <option value="group_asc">グループ順</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 一括操作バー -->
+      <div class="bulk-action-bar">
+        <div class="form-row" style="gap:8px;">
+          <label style="display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:0.84rem;cursor:pointer;">
+            <input type="checkbox" id="cbSelectAllFiltered">
+            全選択
+          </label>
+          <span class="muted" id="selectedCountLabel">選択: 0名</span>
+        </div>
+        <div class="form-row" style="gap:6px;">
+          <button type="button" class="sm ok-btn" id="btnBulkMarkOk">〇</button>
+          <button type="button" class="sm ng-btn" id="btnBulkMarkNg">×</button>
+          <button type="button" class="sm warn-btn" id="btnBulkMarkUndecided">△</button>
+          <span id="bulkGroupAssignControls" class="form-row hidden" style="gap:6px;">
+            <select id="bulkAssignGroupSelect" style="padding:5px 8px;font-size:0.82rem;max-width:190px;">
+              <option value="">グループ一括設定</option>
+            </select>
+            <button type="button" class="sm primary" id="btnBulkAssignGroup">適用</button>
+          </span>
+          <button type="button" class="sm" id="btnClearSelection">解除</button>
+        </div>
+      </div>
+
+      <div id="groupedMemberList"><p class="muted">データなし</p></div>
+    </div>
+  </section>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+  import {
+    getFirestore, collection, doc, setDoc, updateDoc, deleteDoc,
+    onSnapshot, query, orderBy, writeBatch
+  } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCQQ77LCK3BOUO1t1MfGFy6ZHKp4UuDT0I",
+    authDomain: "attendance-management-e55de.firebaseapp.com",
+    projectId: "attendance-management-e55de",
+    storageBucket: "attendance-management-e55de.firebasestorage.app",
+    messagingSenderId: "48444514615",
+    appId: "1:48444514615:web:e26301eb8bdc955d0f3ab2",
+    measurementId: "G-HYL0D2QWP3"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const params = new URLSearchParams(location.search);
+  const activeProjectId = params.get("project");
+  const activeView = params.get("view") || "";
+  const isProjectScoped = Boolean(activeProjectId);
+  const isGroupManagerPage = isProjectScoped && activeView === "groups";
+
+  let projects = [];
+  let currentProject = null;
+  let members = [];
+  let selectedMark = "〇";
+  let statusFilter = "ALL";
+  let hierFilter = { level: null, value: "" };
+  let selectedMemberIds = new Set();
+  let editingId = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+
+  function setSyncState(state, text) {
+    const el = $("syncStatus");
+    el.className = "sync-status" + (state === "saving" ? " saving" : state === "error" ? " error" : "");
+    $("syncText").textContent = text;
+  }
+
+  function normalizeMarkToken(val) {
+    const s = String(val ?? "").trim().replace(/\uFE0F/g, "");
+    if (["❌", "×", "✕", "✖", "欠", "欠席", "不参加", "0", "x", "X", "no", "NO"].includes(s)) return "×";
+    if (["△", "▲", "未", "未定", "調整", "調整中", "2", "d", "maybe"].includes(s)) return "△";
+    if (["⭕", "〇", "○", "◯", "出", "出席", "参加", "1", "o", "O", "yes", "YES"].includes(s)) return "〇";
+    return null;
+  }
+
+  function normalizeMark(val) {
+    return normalizeMarkToken(val) || "△";
+  }
+
+  function parseLegacyPath(str) {
+    const raw = String(str || "").trim();
+    if (!raw) return { smallGroup: "", mediumGroup: "", largeGroup: "" };
+    if (raw.includes("＜＜")) {
+      const [leftPart, largePart] = raw.split("＜＜");
+      const sm = (leftPart || "").split(/[＜<]/).map((x) => x.trim()).filter(Boolean);
+      return { smallGroup: sm[0] || "", mediumGroup: sm[1] || "", largeGroup: (largePart || "").trim() };
+    }
+    const parts = raw.split(/[＜<\/／＞>⊂]/).map((x) => x.trim()).filter(Boolean);
+    return {
+      smallGroup: parts[0] || "",
+      mediumGroup: parts[1] || "",
+      largeGroup: parts[2] || ""
+    };
+  }
+
+  function buildHierarchyTree(proj, memberList) {
+    const rawTree = proj?.hierarchyTree || {};
+    const smallSet = new Set((rawTree.smallGroups || []).map((x) => String(x).trim()).filter(Boolean));
+    const midSet = new Set((rawTree.midGroups || []).map((x) => String(x).trim()).filter(Boolean));
+    const largeSet = new Set((rawTree.largeGroups || []).map((x) => String(x).trim()).filter(Boolean));
+    const smallToMid = { ...(rawTree.smallToMid || {}) };
+    const midToLarge = { ...(rawTree.midToLarge || {}) };
+
+    (proj?.presetGroups || []).forEach((g) => {
+      const p = parseLegacyPath(g);
+      if (p.smallGroup) smallSet.add(p.smallGroup);
+      if (p.mediumGroup) midSet.add(p.mediumGroup);
+      if (p.largeGroup) largeSet.add(p.largeGroup);
+      if (p.smallGroup && p.mediumGroup && !smallToMid[p.smallGroup]) smallToMid[p.smallGroup] = p.mediumGroup;
+      if (p.mediumGroup && p.largeGroup && !midToLarge[p.mediumGroup]) midToLarge[p.mediumGroup] = p.largeGroup;
+    });
+
+    (memberList || []).forEach((m) => {
+      const s = (m.smallGroup || "").trim();
+      const mid = (m.mediumGroup || "").trim();
+      const l = (m.largeGroup || "").trim();
+      if (s) smallSet.add(s);
+      if (mid) midSet.add(mid);
+      if (l) largeSet.add(l);
+      if (s && mid && !smallToMid[s]) smallToMid[s] = mid;
+      if (mid && l && !midToLarge[mid]) midToLarge[mid] = l;
+    });
+
+    Object.keys(smallToMid).forEach((s) => {
+      if (!smallSet.has(s) || !midSet.has(smallToMid[s])) delete smallToMid[s];
+    });
+    Object.keys(midToLarge).forEach((mid) => {
+      if (!midSet.has(mid) || !largeSet.has(midToLarge[mid])) delete midToLarge[mid];
+    });
+
+    return {
+      smallGroups: Array.from(smallSet),
+      midGroups: Array.from(midSet),
+      largeGroups: Array.from(largeSet),
+      smallToMid,
+      midToLarge
+    };
+  }
+
+  function resolveHierarchyFromSmall(smallName, explicitMid, explicitLarge, tree) {
+    const s = (smallName || "").trim();
+    const mid = (explicitMid || (s ? tree.smallToMid[s] : "") || "").trim();
+    const large = (explicitLarge || (mid ? tree.midToLarge[mid] : "") || "").trim();
+    return { smallGroup: s, mediumGroup: mid, largeGroup: large };
+  }
+
+  function getMemberHierarchy(m, tree) {
+    const s = (m.smallGroup || "").trim();
+    if (s) {
+      const mid = (tree?.smallToMid?.[s] ?? (m.mediumGroup || "")).trim();
+      const large = (mid && tree?.midToLarge?.[mid] ? tree.midToLarge[mid] : (m.largeGroup || "")).trim();
+      return { smallGroup: s, mediumGroup: mid, largeGroup: large };
+    }
+    const mid = (m.mediumGroup || "").trim();
+    const large = (mid && tree?.midToLarge?.[mid] ? tree.midToLarge[mid] : (m.largeGroup || "")).trim();
+    return { smallGroup: "", mediumGroup: mid, largeGroup: large };
+  }
+
+  // 要件5: 区切り記号や大/中/小ラベルを省き、グループ名のみシンプルに返す
+  function getPrimaryGroupName(h) {
+    return (h.smallGroup || h.mediumGroup || h.largeGroup || "").trim();
+  }
+
+  function getDisplayGroupLabel(h) {
+    return getPrimaryGroupName(h) || "未分類";
+  }
+
+  function getAllDistinctGroupNames(tree) {
+    const seen = new Set();
+    const list = [];
+    [...tree.smallGroups, ...tree.midGroups, ...tree.largeGroups].forEach((name) => {
+      const clean = (name || "").trim();
+      if (clean && !seen.has(clean)) {
+        seen.add(clean);
+        list.push(clean);
+      }
+    });
+    return list;
+  }
+
+  function resolveByGroupName(groupName, tree) {
+    const g = (groupName || "").trim();
+    if (!g) return { smallGroup: "", mediumGroup: "", largeGroup: "" };
+    if (tree.smallGroups.includes(g)) {
+      return resolveHierarchyFromSmall(g, "", "", tree);
+    }
+    if (tree.midGroups.includes(g)) {
+      return { smallGroup: "", mediumGroup: g, largeGroup: tree.midToLarge[g] || "" };
+    }
+    if (tree.largeGroups.includes(g)) {
+      return { smallGroup: "", mediumGroup: "", largeGroup: g };
+    }
+    return { smallGroup: g, mediumGroup: "", largeGroup: "" };
+  }
+
+  function getProjectUrl(pid, view = "") {
+    const url = new URL(location.href);
+    url.search = "";
+    if (pid) url.searchParams.set("project", pid);
+    if (view) url.searchParams.set("view", view);
+    return url.toString();
+  }
+
+  async function saveHierarchyTree(nextTree) {
+    if (!activeProjectId) return;
+    setSyncState("saving", "保存中...");
+    try {
+      await updateDoc(doc(db, "projects", activeProjectId), {
+        hierarchyTree: nextTree
+      });
+      setSyncState("ok", "自動保存済");
+    } catch (err) {
+      console.error(err);
+      setSyncState("error", "保存エラー");
+      alert("階層情報の保存に失敗しました。");
+    }
+  }
+
+  // 要件7: ヘッダーの不要要素（Excel出力・ID・詳細設定表示）を削除し、必要最小限に整理
+  function renderHeader() {
+    $("adminSection").classList.add("hidden");
+    $("projectSection").classList.add("hidden");
+    $("groupManagerSection").classList.add("hidden");
+    $("adminSub").classList.add("hidden");
+    $("btnCopyShareLink").classList.add("hidden");
+
+    if (!isProjectScoped) {
+      $("adminSection").classList.remove("hidden");
+      $("adminSub").classList.remove("hidden");
+      $("appTitle").textContent = "出欠管理・管理者ページ";
+      return;
+    }
+
+    if (isGroupManagerPage) {
+      $("groupManagerSection").classList.remove("hidden");
+      $("appTitle").textContent = currentProject ? `${currentProject.name}｜グループ階層管理` : "グループ階層管理";
+      return;
+    }
+
+    $("projectSection").classList.remove("hidden");
+    $("btnCopyShareLink").classList.remove("hidden");
+    $("appTitle").textContent = currentProject ? (currentProject.name || "出欠管理・共有ボード") : "読み込み中...";
+  }
+
+  // ナビゲーションボタン遷移（要件2・要件3）
+  $("btnOpenGroupManagerPage").addEventListener("click", () => {
+    if (activeProjectId) location.href = getProjectUrl(activeProjectId, "groups");
+  });
+  $("btnBackToProject").addEventListener("click", () => {
+    if (activeProjectId) location.href = getProjectUrl(activeProjectId);
+  });
+  $("btnGoAdminPage").addEventListener("click", () => {
+    location.href = getProjectUrl("");
+  });
+  $("btnGoAdminFromGroupMgr").addEventListener("click", () => {
+    location.href = getProjectUrl("");
+  });
+
+  function renderProjects() {
+    const container = $("projectList");
+    if (!projects.length) {
+      container.innerHTML = `<p class="muted">まだプロジェクトがありません。上から作成してください。</p>`;
+      return;
+    }
+    container.innerHTML = projects.map((p) => {
+      const shareUrl = getProjectUrl(p.id);
+      const groupMgrUrl = getProjectUrl(p.id, "groups");
+      return `
+        <div class="proj-item" data-pid="${escapeAttr(p.id)}">
+          <div style="flex:1;min-width:260px;">
+            <div style="font-weight:700;font-size:1rem;">${escapeHtml(p.name)}</div>
+            <label style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:0.85rem;">
+              <input type="checkbox" class="toggle-group-cb" ${p.groupEnabled ? "checked" : ""}>
+              グループ階層管理を有効にする
+            </label>
+            <div class="link-box">
+              <input type="text" readonly value="${escapeAttr(shareUrl)}">
+              <button type="button" class="sm copy-proj-link">リンクコピー</button>
+              <a href="${escapeAttr(shareUrl)}" style="font-size:0.82rem;font-weight:600;">出欠画面を開く</a>
+              ${p.groupEnabled ? `<a href="${escapeAttr(groupMgrUrl)}" style="font-size:0.82rem;font-weight:600;">グループ管理</a>` : ""}
+            </div>
+          </div>
+          <div>
+            <button type="button" class="sm danger del-proj-btn">削除</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    container.querySelectorAll(".proj-item").forEach((el) => {
+      const pid = el.dataset.pid;
+      const proj = projects.find((x) => x.id === pid);
+      if (!proj) return;
+
+      el.querySelector(".toggle-group-cb").addEventListener("change", async (e) => {
+        setSyncState("saving", "保存中...");
+        try {
+          await updateDoc(doc(db, "projects", pid), { groupEnabled: e.target.checked });
+          setSyncState("ok", "自動保存済");
+        } catch (err) {
+          console.error(err);
+          setSyncState("error", "保存エラー");
+        }
+      });
+
+      el.querySelector(".copy-proj-link").addEventListener("click", () => {
+        navigator.clipboard?.writeText(getProjectUrl(pid));
+        alert("プロジェクト専用リンクをコピーしました。");
+      });
+
+      el.querySelector(".del-proj-btn").addEventListener("click", async () => {
+        if (!confirm(`「${proj.name}」を削除しますか？`)) return;
+        setSyncState("saving", "削除中...");
+        try {
+          await deleteDoc(doc(db, "projects", pid));
+          setSyncState("ok", "自動保存済");
+        } catch (err) {
+          console.error(err);
+          setSyncState("error", "削除エラー");
+        }
+      });
+    });
+  }
+
+  function updateGroupVisibility(tree) {
+    const enabled = Boolean(currentProject?.groupEnabled);
+    $("btnOpenGroupManagerPage").classList.toggle("hidden", !enabled);
+    $("hierarchySummaryCard").classList.toggle("hidden", !enabled);
+    $("selGroupSimple").classList.toggle("hidden", !enabled);
+    $("filterGroupSimple").classList.toggle("hidden", !enabled);
+    $("bulkGroupAssignControls").classList.toggle("hidden", !enabled);
+
+    if (!enabled) return;
+
+    const groupNames = getAllDistinctGroupNames(tree);
+
+    const fillSimpleSelect = (selId, defaultText) => {
+      const sel = $(selId);
+      const prev = sel.value;
+      sel.innerHTML = `<option value="">${defaultText}</option>` +
+        groupNames.map((g) => `<option value="${escapeAttr(g)}">${escapeHtml(g)}</option>`).join("");
+      if (groupNames.includes(prev)) sel.value = prev;
+    };
+
+    fillSimpleSelect("selGroupSimple", "グループを選択");
+    fillSimpleSelect("bulkAssignGroupSelect", "グループ一括設定");
+
+    const filterSel = $("filterGroupSimple");
+    const prevFilter = filterSel.value;
+    filterSel.innerHTML = `<option value="ALL">すべてのグループ</option>` +
+      groupNames.map((g) => `<option value="${escapeAttr(g)}">${escapeHtml(g)}</option>`).join("");
+    if (prevFilter === "ALL" || groupNames.includes(prevFilter)) {
+      filterSel.value = prevFilter;
+    }
+  }
+
+  // 要件1: 大グループ -> 中グループ -> 小グループ へと展開するアコーディオンUI
+  function renderHierarchyAccordion(tree) {
+    const enabled = Boolean(currentProject?.groupEnabled);
+    if (!enabled) return;
+
+    const calcStats = (predicate) => {
+      const list = members.filter(predicate);
+      return {
+        total: list.length,
+        o: list.filter((m) => m.mark === "〇").length,
+        x: list.filter((m) => m.mark === "×").length,
+        d: list.filter((m) => m.mark === "△").length
+      };
+    };
+
+    const renderBadgesAndFilter = (levelKey, name, st) => {
+      const isSel = hierFilter.level === levelKey && hierFilter.value === name;
+      return `
+        <div class="acc-right">
+          <span class="cnt-chip cnt-o">〇 ${st.o}</span>
+          <span class="cnt-chip cnt-x">× ${st.x}</span>
+          <span class="cnt-chip cnt-d">△ ${st.d}</span>
+          <button type="button" class="acc-filter-btn ${isSel ? "selected" : ""}" data-level="${levelKey}" data-val="${escapeAttr(name)}">
+            ${isSel ? "絞込中" : "絞込"}
+          </button>
+        </div>
+      `;
+    };
+
+    const renderSmallItem = (sName) => {
+      const st = calcStats((m) => getMemberHierarchy(m, tree).smallGroup === sName);
+      return `
+        <div class="acc-leaf-row">
+          <div class="acc-title-wrap">
+            <span>${escapeHtml(sName)}</span>
+            <span class="muted">(${st.total}名)</span>
+          </div>
+          ${renderBadgesAndFilter("small", sName, st)}
+        </div>
+      `;
+    };
+
+    const renderMidNode = (midName) => {
+      const st = calcStats((m) => getMemberHierarchy(m, tree).mediumGroup === midName);
+      const childSmalls = tree.smallGroups.filter((s) => tree.smallToMid[s] === midName);
+      if (!childSmalls.length) {
+        return `
+          <div class="acc-leaf-row">
+            <div class="acc-title-wrap">
+              <span>${escapeHtml(midName)}</span>
+              <span class="muted">(${st.total}名)</span>
+            </div>
+            ${renderBadgesAndFilter("mid", midName, st)}
+          </div>
+        `;
+      }
+      return `
+        <details class="acc-node lvl-mid">
+          <summary class="acc-summary">
+            <div class="acc-title-wrap">
+              <span class="acc-caret">▶</span>
+              <span>${escapeHtml(midName)}</span>
+              <span class="muted">(${st.total}名)</span>
+            </div>
+            ${renderBadgesAndFilter("mid", midName, st)}
+          </summary>
+          <div class="acc-body">
+            ${childSmalls.map(renderSmallItem).join("")}
+          </div>
+        </details>
+      `;
+    };
+
+    const blocks = [];
+
+    // 1. 最上位（大グループ）から階層アコーディオンを構築
+    tree.largeGroups.forEach((largeName) => {
+      const st = calcStats((m) => getMemberHierarchy(m, tree).largeGroup === largeName);
+      const childMids = tree.midGroups.filter((mid) => tree.midToLarge[mid] === largeName);
+      if (!childMids.length) {
+        blocks.push(`
+          <div class="acc-node" style="padding:10px 12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div class="acc-title-wrap">
+              <span>${escapeHtml(largeName)}</span>
+              <span class="muted">(${st.total}名)</span>
+            </div>
+            ${renderBadgesAndFilter("large", largeName, st)}
+          </div>
+        `);
+      } else {
+        blocks.push(`
+          <details class="acc-node lvl-large">
+            <summary class="acc-summary">
+              <div class="acc-title-wrap">
+                <span class="acc-caret">▶</span>
+                <span>${escapeHtml(largeName)}</span>
+                <span class="muted">(${st.total}名)</span>
+              </div>
+              ${renderBadgesAndFilter("large", largeName, st)}
+            </summary>
+            <div class="acc-body">
+              ${childMids.map(renderMidNode).join("")}
+            </div>
+          </details>
+        `);
+      }
+    });
+
+    // 2. 最上位に未紐づけの中間グループがある場合
+    const orphanMids = tree.midGroups.filter((mid) => !tree.midToLarge[mid]);
+    orphanMids.forEach((midName) => {
+      blocks.push(renderMidNode(midName));
+    });
+
+    // 3. 中間グループに未紐づけの末端グループがある場合
+    const orphanSmalls = tree.smallGroups.filter((s) => !tree.smallToMid[s]);
+    orphanSmalls.forEach((sName) => {
+      blocks.push(renderSmallItem(sName));
+    });
+
+    const container = $("hierarchyAccordion");
+    container.innerHTML = blocks.length
+      ? blocks.join("")
+      : `<p class="muted">グループがまだ登録されていません。「グループ階層管理」から追加できます。</p>`;
+
+    container.querySelectorAll(".acc-filter-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const lvl = btn.dataset.level;
+        const val = btn.dataset.val;
+        if (hierFilter.level === lvl && hierFilter.value === val) {
+          hierFilter = { level: null, value: "" };
+        } else {
+          hierFilter = { level: lvl, value: val };
+        }
+        renderMembers();
+      });
+    });
+  }
+
+  // 独立したグループ階層管理ページの描画（要件2）
+  function renderGroupManagerPage() {
+    if (!currentProject || !isGroupManagerPage) return;
+    const tree = buildHierarchyTree(currentProject, members);
+
+    const renderNodeList = (containerId, list, levelKey) => {
+      const el = $(containerId);
+      if (!list.length) {
+        el.innerHTML = `<div class="muted">未登録</div>`;
+        return;
+      }
+      el.innerHTML = list.map((name) => `
+        <div class="editor-node-row">
+          <span style="font-weight:600;">${escapeHtml(name)}</span>
+          <div class="form-row" style="gap:4px;">
+            <button type="button" class="sm rename-node-btn" data-level="${levelKey}" data-name="${escapeAttr(name)}">名称変更</button>
+            <button type="button" class="sm danger del-node-btn" data-level="${levelKey}" data-name="${escapeAttr(name)}">削除</button>
+          </div>
+        </div>
+      `).join("");
+
+      el.querySelectorAll(".rename-node-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const oldName = btn.dataset.name;
+          const newName = prompt(`「${oldName}」の新しい名称を入力してください：`, oldName)?.trim();
+          if (!newName || newName === oldName) return;
+
+          const next = {
+            smallGroups: [...tree.smallGroups],
+            midGroups: [...tree.midGroups],
+            largeGroups: [...tree.largeGroups],
+            smallToMid: { ...tree.smallToMid },
+            midToLarge: { ...tree.midToLarge }
+          };
+
+          const batch = writeBatch(db);
+          if (levelKey === "small") {
+            next.smallGroups = Array.from(new Set(next.smallGroups.map((x) => (x === oldName ? newName : x))));
+            if (next.smallToMid[oldName]) {
+              next.smallToMid[newName] = next.smallToMid[oldName];
+              delete next.smallToMid[oldName];
+            }
+            members.forEach((m) => {
+              if ((m.smallGroup || "").trim() === oldName) {
+                batch.update(doc(db, "projects", activeProjectId, "members", m.id), {
+                  smallGroup: newName,
+                  updatedAt: Date.now()
+                });
+              }
+            });
+          } else if (levelKey === "mid") {
+            next.midGroups = Array.from(new Set(next.midGroups.map((x) => (x === oldName ? newName : x))));
+            Object.keys(next.smallToMid).forEach((s) => {
+              if (next.smallToMid[s] === oldName) next.smallToMid[s] = newName;
+            });
+            if (next.midToLarge[oldName]) {
+              next.midToLarge[newName] = next.midToLarge[oldName];
+              delete next.midToLarge[oldName];
+            }
+            members.forEach((m) => {
+              if ((m.mediumGroup || "").trim() === oldName) {
+                batch.update(doc(db, "projects", activeProjectId, "members", m.id), {
+                  mediumGroup: newName,
+                  updatedAt: Date.now()
+                });
+              }
+            });
+          } else if (levelKey === "large") {
+            next.largeGroups = Array.from(new Set(next.largeGroups.map((x) => (x === oldName ? newName : x))));
+            Object.keys(next.midToLarge).forEach((mid) => {
+              if (next.midToLarge[mid] === oldName) next.midToLarge[mid] = newName;
+            });
+            members.forEach((m) => {
+              if ((m.largeGroup || "").trim() === oldName) {
+                batch.update(doc(db, "projects", activeProjectId, "members", m.id), {
+                  largeGroup: newName,
+                  updatedAt: Date.now()
+                });
+              }
+            });
+          }
+
+          setSyncState("saving", "保存中...");
+          try {
+            batch.update(doc(db, "projects", activeProjectId), { hierarchyTree: next });
+            await batch.commit();
+            setSyncState("ok", "自動保存済");
+          } catch (err) {
+            console.error(err);
+            setSyncState("error", "保存エラー");
+          }
+        });
+      });
+
+      el.querySelectorAll(".del-node-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const target = btn.dataset.name;
+          if (!confirm(`「${target}」を削除しますか？`)) return;
+          const next = {
+            smallGroups: tree.smallGroups.filter((x) => !(levelKey === "small" && x === target)),
+            midGroups: tree.midGroups.filter((x) => !(levelKey === "mid" && x === target)),
+            largeGroups: tree.largeGroups.filter((x) => !(levelKey === "large" && x === target)),
+            smallToMid: { ...tree.smallToMid },
+            midToLarge: { ...tree.midToLarge }
+          };
+          if (levelKey === "small") delete next.smallToMid[target];
+          if (levelKey === "mid") {
+            delete next.midToLarge[target];
+            Object.keys(next.smallToMid).forEach((s) => {
+              if (next.smallToMid[s] === target) delete next.smallToMid[s];
+            });
+          }
+          if (levelKey === "large") {
+            Object.keys(next.midToLarge).forEach((mid) => {
+              if (next.midToLarge[mid] === target) delete next.midToLarge[mid];
+            });
+          }
+          await saveHierarchyTree(next);
+        });
+      });
+    };
+
+    renderNodeList("editorLargeList", tree.largeGroups, "large");
+    renderNodeList("editorMidList", tree.midGroups, "mid");
+    renderNodeList("editorSmallList", tree.smallGroups, "small");
+
+    const targetLargeSel = $("editorTargetLarge");
+    const prevTargetLarge = targetLargeSel.value;
+    targetLargeSel.innerHTML = tree.largeGroups.length
+      ? tree.largeGroups.map((l) => `<option value="${escapeAttr(l)}">${escapeHtml(l)}</option>`).join("")
+      : `<option value="">（最上位グループを追加してください）</option>`;
+    if (tree.largeGroups.includes(prevTargetLarge)) targetLargeSel.value = prevTargetLarge;
+
+    const activeLarge = targetLargeSel.value;
+    const midChecksEl = $("editorMidCheckboxes");
+    if (!activeLarge || !tree.midGroups.length) {
+      midChecksEl.innerHTML = `<div class="muted">最上位グループと中間グループを登録すると、ここで所属設定ができます。</div>`;
+    } else {
+      midChecksEl.innerHTML = tree.midGroups.map((mid) => {
+        const currentParentLarge = tree.midToLarge[mid] || "";
+        const checked = currentParentLarge === activeLarge;
+        const otherNote = (!checked && currentParentLarge) ? `<span class="muted">（現在: ${escapeHtml(currentParentLarge)}）</span>` : "";
+        return `
+          <label class="check-tile">
+            <input type="checkbox" class="link-mid-cb" value="${escapeAttr(mid)}" ${checked ? "checked" : ""}>
+            <span><strong>${escapeHtml(mid)}</strong>${otherNote}</span>
+          </label>
+        `;
+      }).join("");
+    }
+
+    const targetMidSel = $("editorTargetMid");
+    const prevTargetMid = targetMidSel.value;
+    targetMidSel.innerHTML = tree.midGroups.length
+      ? tree.midGroups.map((m) => `<option value="${escapeAttr(m)}">${escapeHtml(m)}</option>`).join("")
+      : `<option value="">（中間グループを追加してください）</option>`;
+    if (tree.midGroups.includes(prevTargetMid)) targetMidSel.value = prevTargetMid;
+
+    const activeMid = targetMidSel.value;
+    const smallChecksEl = $("editorSmallCheckboxes");
+    if (!activeMid || !tree.smallGroups.length) {
+      smallChecksEl.innerHTML = `<div class="muted">中間グループと末端グループを登録すると、ここで所属設定ができます。</div>`;
+    } else {
+      smallChecksEl.innerHTML = tree.smallGroups.map((s) => {
+        const currentParentMid = tree.smallToMid[s] || "";
+        const checked = currentParentMid === activeMid;
+        const otherNote = (!checked && currentParentMid) ? `<span class="muted">（現在: ${escapeHtml(currentParentMid)}）</span>` : "";
+        return `
+          <label class="check-tile">
+            <input type="checkbox" class="link-small-cb" value="${escapeAttr(s)}" ${checked ? "checked" : ""}>
+            <span><strong>${escapeHtml(s)}</strong>${otherNote}</span>
+          </label>
+        `;
+      }).join("");
+    }
+
+    const allNames = getAllDistinctGroupNames(tree);
+    $("groupMgrTreePreview").innerHTML = allNames.length
+      ? allNames.map((n) => `<span class="tree-pill">${escapeHtml(n)}</span>`).join("")
+      : `<span class="muted">まだグループが登録されていません。</span>`;
+  }
+
+  $("editorTargetMid").addEventListener("change", renderGroupManagerPage);
+  $("editorTargetLarge").addEventListener("change", renderGroupManagerPage);
+
+  $("btnEditorAddSmall").addEventListener("click", async () => {
+    const val = $("editorNewSmall").value.trim();
+    if (!val) return;
+    const tree = buildHierarchyTree(currentProject, members);
+    $("editorNewSmall").value = "";
+    await saveHierarchyTree({
+      ...tree,
+      smallGroups: Array.from(new Set([...tree.smallGroups, val]))
+    });
+  });
+
+  $("btnEditorAddMid").addEventListener("click", async () => {
+    const val = $("editorNewMid").value.trim();
+    if (!val) return;
+    const tree = buildHierarchyTree(currentProject, members);
+    $("editorNewMid").value = "";
+    await saveHierarchyTree({
+      ...tree,
+      midGroups: Array.from(new Set([...tree.midGroups, val]))
+    });
+  });
+
+  $("btnEditorAddLarge").addEventListener("click", async () => {
+    const val = $("editorNewLarge").value.trim();
+    if (!val) return;
+    const tree = buildHierarchyTree(currentProject, members);
+    $("editorNewLarge").value = "";
+    await saveHierarchyTree({
+      ...tree,
+      largeGroups: Array.from(new Set([...tree.largeGroups, val]))
+    });
+  });
+
+  $("btnSaveLargeMidLinks").addEventListener("click", async () => {
+    const activeLarge = $("editorTargetLarge").value;
+    if (!activeLarge) return alert("対象グループを選択してください。");
+    const tree = buildHierarchyTree(currentProject, members);
+    const checkedMids = new Set(
+      Array.from(document.querySelectorAll(".link-mid-cb:checked")).map((cb) => cb.value)
+    );
+
+    const nextMidToLarge = { ...tree.midToLarge };
+    tree.midGroups.forEach((mid) => {
+      if (checkedMids.has(mid)) {
+        nextMidToLarge[mid] = activeLarge;
+      } else if (nextMidToLarge[mid] === activeLarge) {
+        delete nextMidToLarge[mid];
+      }
+    });
+
+    const nextTree = { ...tree, midToLarge: nextMidToLarge };
+    const batch = writeBatch(db);
+    batch.update(doc(db, "projects", activeProjectId), { hierarchyTree: nextTree });
+
+    members.forEach((m) => {
+      const h = getMemberHierarchy(m, nextTree);
+      if (h.mediumGroup && tree.midGroups.includes(h.mediumGroup)) {
+        const newLarge = nextTree.midToLarge[h.mediumGroup] || "";
+        batch.update(doc(db, "projects", activeProjectId, "members", m.id), {
+          largeGroup: newLarge,
+          group: getPrimaryGroupName({ ...h, largeGroup: newLarge }),
+          updatedAt: Date.now()
+        });
+      }
+    });
+
+    setSyncState("saving", "保存中...");
+    try {
+      await batch.commit();
+      setSyncState("ok", "自動保存済");
+      alert(`「${activeLarge}」の所属設定を保存しました。`);
+    } catch (err) {
+      console.error(err);
+      setSyncState("error", "保存エラー");
+    }
+  });
+
+  $("btnSaveMidSmallLinks").addEventListener("click", async () => {
+    const activeMid = $("editorTargetMid").value;
+    if (!activeMid) return alert("対象グループを選択してください。");
+    const tree = buildHierarchyTree(currentProject, members);
+    const checkedSmalls = new Set(
+      Array.from(document.querySelectorAll(".link-small-cb:checked")).map((cb) => cb.value)
+    );
+
+    const nextSmallToMid = { ...tree.smallToMid };
+    tree.smallGroups.forEach((s) => {
+      if (checkedSmalls.has(s)) {
+        nextSmallToMid[s] = activeMid;
+      } else if (nextSmallToMid[s] === activeMid) {
+        delete nextSmallToMid[s];
+      }
+    });
+
+    const nextTree = { ...tree, smallToMid: nextSmallToMid };
+    const batch = writeBatch(db);
+    batch.update(doc(db, "projects", activeProjectId), { hierarchyTree: nextTree });
+
+    members.forEach((m) => {
+      const s = (m.smallGroup || "").trim();
+      if (s && tree.smallGroups.includes(s)) {
+        const resolved = resolveHierarchyFromSmall(s, "", "", nextTree);
+        batch.update(doc(db, "projects", activeProjectId, "members", m.id), {
+          mediumGroup: resolved.mediumGroup,
+          largeGroup: resolved.largeGroup,
+          group: getPrimaryGroupName(resolved),
+          updatedAt: Date.now()
+        });
+      }
+    });
+
+    setSyncState("saving", "保存中...");
+    try {
+      await batch.commit();
+      setSyncState("ok", "自動保存済");
+      alert(`「${activeMid}」の所属設定を保存しました。`);
+    } catch (err) {
+      console.error(err);
+      setSyncState("error", "保存エラー");
+    }
+  });
+
+  function getFilteredAndSortedMembers(tree) {
+    const enabled = Boolean(currentProject?.groupEnabled);
+    const q = $("searchName").value.trim().toLowerCase();
+    const simpleGroupFilter = $("filterGroupSimple").value;
+
+    const filtered = members.filter((m) => {
+      if (statusFilter !== "ALL" && m.mark !== statusFilter) return false;
+      const h = getMemberHierarchy(m, tree);
+      const primaryName = getPrimaryGroupName(h);
+
+      if (enabled && hierFilter.level && hierFilter.value) {
+        if (hierFilter.level === "small" && h.smallGroup !== hierFilter.value) return false;
+        if (hierFilter.level === "mid" && h.mediumGroup !== hierFilter.value) return false;
+        if (hierFilter.level === "large" && h.largeGroup !== hierFilter.value) return false;
+      }
+
+      if (enabled && simpleGroupFilter !== "ALL") {
+        const matchesAny =
+          h.smallGroup === simpleGroupFilter ||
+          h.mediumGroup === simpleGroupFilter ||
+          h.largeGroup === simpleGroupFilter;
+        if (!matchesAny) return false;
+      }
+
+      if (q) {
+        const hay = `${m.name || ""} ${m.note || ""} ${primaryName}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    const sortKey = $("sortMembersBy").value;
+    const markWeight = { "〇": 1, "△": 2, "×": 3 };
+    return filtered.sort((a, b) => {
+      const ha = getMemberHierarchy(a, tree);
+      const hb = getMemberHierarchy(b, tree);
+      if (sortKey === "name_asc") return (a.name || "").localeCompare(b.name || "", "ja");
+      if (sortKey === "mark_order") return (markWeight[a.mark] ?? 9) - (markWeight[b.mark] ?? 9);
+      if (sortKey === "group_asc") return (getPrimaryGroupName(ha) || "zzz").localeCompare(getPrimaryGroupName(hb) || "zzz", "ja");
+      return (a.createdAt || 0) - (b.createdAt || 0);
+    });
+  }
+
+  function updateSelectionUI(filtered) {
+    const validIds = new Set(members.map((m) => m.id));
+    Array.from(selectedMemberIds).forEach((id) => {
+      if (!validIds.has(id)) selectedMemberIds.delete(id);
+    });
+
+    $("selectedCountLabel").textContent = `選択: ${selectedMemberIds.size}名`;
+    const cbAll = $("cbSelectAllFiltered");
+    if (!filtered.length) {
+      cbAll.checked = false;
+      cbAll.indeterminate = false;
+      return;
+    }
+    const selectedInFiltered = filtered.filter((m) => selectedMemberIds.has(m.id)).length;
+    cbAll.checked = selectedInFiltered === filtered.length;
+    cbAll.indeterminate = selectedInFiltered > 0 && selectedInFiltered < filtered.length;
+  }
+
+  function renderMembers() {
+    const tree = buildHierarchyTree(currentProject, members);
+    const enabled = Boolean(currentProject?.groupEnabled);
+
+    if (isGroupManagerPage) {
+      renderGroupManagerPage();
+      return;
+    }
+
+    updateGroupVisibility(tree);
+    renderHierarchyAccordion(tree);
+
+    $("cntAll").textContent = members.length;
+    $("cntO").textContent = members.filter((m) => m.mark === "〇").length;
+    $("cntX").textContent = members.filter((m) => m.mark === "×").length;
+    $("cntD").textContent = members.filter((m) => m.mark === "△").length;
+
+    const filtered = getFilteredAndSortedMembers(tree);
+    updateSelectionUI(filtered);
+
+    const wrap = $("groupedMemberList");
+    if (!filtered.length) {
+      wrap.innerHTML = `<p class="muted">該当するデータがありません</p>`;
+      return;
+    }
+
+    const buckets = new Map();
+    filtered.forEach((m) => {
+      const h = getMemberHierarchy(m, tree);
+      const key = enabled ? getDisplayGroupLabel(h) : "出欠名簿";
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(m);
+    });
+
+    const allGroupNames = getAllDistinctGroupNames(tree);
+
+    wrap.innerHTML = Array.from(buckets.entries()).map(([groupTitle, list], idx) => {
+      const gO = list.filter((x) => x.mark === "〇").length;
+      const gX = list.filter((x) => x.mark === "×").length;
+      const gD = list.filter((x) => x.mark === "△").length;
+      const allInGroupChecked = list.length > 0 && list.every((m) => selectedMemberIds.has(m.id));
+
+      const rowsHtml = list.map((m) => {
+        const h = getMemberHierarchy(m, tree);
+        const primaryGrp = getPrimaryGroupName(h);
+        const isChecked = selectedMemberIds.has(m.id);
+
+        if (editingId === m.id) {
+          return `
+            <div class="member-row" data-id="${escapeAttr(m.id)}">
+              <div class="member-main" style="flex-wrap:wrap;">
+                <input type="checkbox" class="row-cb" ${isChecked ? "checked" : ""}>
+                <input type="text" class="edit-name" value="${escapeAttr(m.name)}" style="width:130px;">
+                <select class="edit-mark">
+                  <option value="〇" ${m.mark === "〇" ? "selected" : ""}>〇</option>
+                  <option value="×" ${m.mark === "×" ? "selected" : ""}>×</option>
+                  <option value="△" ${m.mark === "△" ? "selected" : ""}>△</option>
+                </select>
+                ${enabled ? `
+                  <select class="edit-group">
+                    <option value="">グループなし</option>
+                    ${allGroupNames.map((g) => `<option value="${escapeAttr(g)}" ${primaryGrp === g ? "selected" : ""}>${escapeHtml(g)}</option>`).join("")}
+                  </select>
+                ` : ""}
+                <input type="text" class="edit-note" value="${escapeAttr(m.note || "")}" placeholder="備考" style="width:140px;">
+              </div>
+              <div class="member-controls">
+                <button type="button" class="sm primary save-edit">保存</button>
+                <button type="button" class="sm cancel-edit">取消</button>
+              </div>
+            </div>
+          `;
+        }
+
+        // 要件6: 出欠ボタンは説明文なし（〇 / × / △）かつ横並び配置でモバイル最適化
+        return `
+          <div class="member-row" data-id="${escapeAttr(m.id)}">
+            <div class="member-main">
+              <input type="checkbox" class="row-cb" ${isChecked ? "checked" : ""}>
+              <div class="member-info">
+                <div class="member-name">${escapeHtml(m.name)}</div>
+                <div class="member-meta">
+                  ${enabled && primaryGrp ? `<span class="group-badge">${escapeHtml(primaryGrp)}</span>` : ""}
+                  ${m.note ? `<span>${escapeHtml(m.note)}</span>` : ""}
+                </div>
+              </div>
+            </div>
+            <div class="member-controls">
+              <div class="mark-group">
+                <button type="button" class="mark-btn quick-mark ${m.mark === "〇" ? "sel-o" : ""}" data-mark="〇">〇</button>
+                <button type="button" class="mark-btn quick-mark ${m.mark === "×" ? "sel-x" : ""}" data-mark="×">×</button>
+                <button type="button" class="mark-btn quick-mark ${m.mark === "△" ? "sel-d" : ""}" data-mark="△">△</button>
+              </div>
+              <button type="button" class="sm start-edit">編集</button>
+              <button type="button" class="sm danger del-member">削除</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      return `
+        <details class="group-box" open data-group-index="${idx}">
+          <summary class="group-summary">
+            <div class="group-summary-left">
+              <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;" onclick="event.stopPropagation();">
+                <input type="checkbox" class="group-select-all" ${allInGroupChecked ? "checked" : ""}>
+              </label>
+              <span>${escapeHtml(groupTitle)}</span>
+              <span class="muted">(${list.length}名)</span>
+            </div>
+            <div class="group-counts">
+              <span class="cnt-chip cnt-o">〇 ${gO}</span>
+              <span class="cnt-chip cnt-x">× ${gX}</span>
+              <span class="cnt-chip cnt-d">△ ${gD}</span>
+            </div>
+          </summary>
+          <div class="member-list-rows">${rowsHtml}</div>
+        </details>
+      `;
+    }).join("");
+
+    wrap.querySelectorAll(".group-box").forEach((box) => {
+      const groupCb = box.querySelector(".group-select-all");
+      const rowCbs = Array.from(box.querySelectorAll(".member-row[data-id] .row-cb"));
+      groupCb?.addEventListener("change", () => {
+        rowCbs.forEach((cb) => {
+          const id = cb.closest(".member-row").dataset.id;
+          cb.checked = groupCb.checked;
+          if (groupCb.checked) selectedMemberIds.add(id);
+          else selectedMemberIds.delete(id);
+        });
+        updateSelectionUI(filtered);
+      });
+    });
+
+    wrap.querySelectorAll(".member-row[data-id]").forEach((row) => {
+      const id = row.dataset.id;
+      const member = members.find((x) => x.id === id);
+      if (!member) return;
+
+      row.querySelector(".row-cb")?.addEventListener("change", (e) => {
+        if (e.target.checked) selectedMemberIds.add(id);
+        else selectedMemberIds.delete(id);
+        updateSelectionUI(filtered);
+      });
+
+      row.querySelectorAll(".quick-mark").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const nextMark = btn.dataset.mark;
+          setSyncState("saving", "保存中...");
+          try {
+            await updateDoc(doc(db, "projects", activeProjectId, "members", id), {
+              mark: nextMark,
+              updatedAt: Date.now()
+            });
+            setSyncState("ok", "自動保存済");
+          } catch (err) {
+            console.error(err);
+            setSyncState("error", "保存エラー");
+          }
+        });
+      });
+
+      row.querySelector(".start-edit")?.addEventListener("click", () => {
+        editingId = id;
+        renderMembers();
+      });
+
+      row.querySelector(".cancel-edit")?.addEventListener("click", () => {
+        editingId = null;
+        renderMembers();
+      });
+
+      row.querySelector(".save-edit")?.addEventListener("click", async () => {
+        const name = row.querySelector(".edit-name").value.trim();
+        if (!name) return alert("名前を入力してください");
+        const mark = row.querySelector(".edit-mark").value;
+        const note = row.querySelector(".edit-note").value.trim();
+        const patch = { name, mark, note, updatedAt: Date.now() };
+
+        if (enabled) {
+          const chosenGrp = row.querySelector(".edit-group")?.value || "";
+          const h = resolveByGroupName(chosenGrp, tree);
+          patch.smallGroup = h.smallGroup;
+          patch.mediumGroup = h.mediumGroup;
+          patch.largeGroup = h.largeGroup;
+          patch.group = getPrimaryGroupName(h);
+        }
+
+        editingId = null;
+        setSyncState("saving", "保存中...");
+        try {
+          await updateDoc(doc(db, "projects", activeProjectId, "members", id), patch);
+          setSyncState("ok", "自動保存済");
+        } catch (err) {
+          console.error(err);
+          setSyncState("error", "保存エラー");
+        }
+      });
+
+      row.querySelector(".del-member")?.addEventListener("click", async () => {
+        if (!confirm(`「${member.name}」を削除しますか？`)) return;
+        selectedMemberIds.delete(id);
+        setSyncState("saving", "削除中...");
+        try {
+          await deleteDoc(doc(db, "projects", activeProjectId, "members", id));
+          setSyncState("ok", "自動保存済");
+        } catch (err) {
+          console.error(err);
+          setSyncState("error", "削除エラー");
+        }
+      });
+    });
+  }
+
+  $("cbSelectAllFiltered").addEventListener("change", (e) => {
+    const tree = buildHierarchyTree(currentProject, members);
+    const filtered = getFilteredAndSortedMembers(tree);
+    if (e.target.checked) {
+      filtered.forEach((m) => selectedMemberIds.add(m.id));
+    } else {
+      filtered.forEach((m) => selectedMemberIds.delete(m.id));
+    }
+    renderMembers();
+  });
+
+  $("btnClearSelection").addEventListener("click", () => {
+    selectedMemberIds.clear();
+    renderMembers();
+  });
+
+  async function bulkUpdateSelectedMark(newMark) {
+    if (!activeProjectId) return;
+    const ids = Array.from(selectedMemberIds);
+    if (!ids.length) return alert("対象者が選択されていません。");
+
+    setSyncState("saving", "更新中...");
+    try {
+      const batch = writeBatch(db);
+      const now = Date.now();
+      ids.forEach((id) => {
+        batch.update(doc(db, "projects", activeProjectId, "members", id), {
+          mark: newMark,
+          updatedAt: now
+        });
+      });
+      await batch.commit();
+      setSyncState("ok", "自動保存済");
+    } catch (err) {
+      console.error(err);
+      setSyncState("error", "一括更新エラー");
+    }
+  }
+
+  $("btnBulkMarkOk").addEventListener("click", () => bulkUpdateSelectedMark("〇"));
+  $("btnBulkMarkNg").addEventListener("click", () => bulkUpdateSelectedMark("×"));
+  $("btnBulkMarkUndecided").addEventListener("click", () => bulkUpdateSelectedMark("△"));
+
+  $("btnBulkAssignGroup").addEventListener("click", async () => {
+    if (!activeProjectId) return;
+    const ids = Array.from(selectedMemberIds);
+    if (!ids.length) return alert("対象者を選択してください。");
+
+    const chosenGrp = $("bulkAssignGroupSelect").value;
+    if (!chosenGrp) return alert("グループを選択してください。");
+
+    const tree = buildHierarchyTree(currentProject, members);
+    const nextH = resolveByGroupName(chosenGrp, tree);
+
+    setSyncState("saving", "保存中...");
+    try {
+      const batch = writeBatch(db);
+      const now = Date.now();
+      ids.forEach((id) => {
+        batch.update(doc(db, "projects", activeProjectId, "members", id), {
+          smallGroup: nextH.smallGroup,
+          mediumGroup: nextH.mediumGroup,
+          largeGroup: nextH.largeGroup,
+          group: getPrimaryGroupName(nextH),
+          updatedAt: now
+        });
+      });
+      await batch.commit();
+      setSyncState("ok", "自動保存済");
+    } catch (err) {
+      console.error(err);
+      setSyncState("error", "保存エラー");
+    }
+  });
+
+  $("btnResetHierFilter").addEventListener("click", () => {
+    hierFilter = { level: null, value: "" };
+    $("filterGroupSimple").value = "ALL";
+    renderMembers();
+  });
+
+  $("btnCreateProj").addEventListener("click", async () => {
+    const name = $("newProjName").value.trim();
+    if (!name) return alert("プロジェクト名を入力してください");
+    const groupEnabled = $("newProjGroupEnabled").checked;
+    const initialTree = {
+      smallGroups: [],
+      midGroups: [],
+      largeGroups: [],
+      smallToMid: {},
+      midToLarge: {}
+    };
+
+    const id = "proj_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+    setSyncState("saving", "作成中...");
+    try {
+      await setDoc(doc(db, "projects", id), {
+        id, name, groupEnabled, hierarchyTree: initialTree, createdAt: Date.now()
+      });
+      $("newProjName").value = "";
+      setSyncState("ok", "自動保存済");
+    } catch (err) {
+      console.error(err);
+      setSyncState("error", "作成エラー");
+      alert("保存に失敗しました。");
+    }
+  });
+
+  $("inpMarkGroup").querySelectorAll(".mark-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedMark = btn.dataset.mark;
+      $("inpMarkGroup").querySelectorAll(".mark-btn").forEach((b) => {
+        b.classList.remove("sel-o", "sel-x", "sel-d");
+        if (b.dataset.mark === selectedMark) {
+          b.classList.add(selectedMark === "〇" ? "sel-o" : selectedMark === "×" ? "sel-x" : "sel-d");
+        }
+      });
+    });
+  });
+
+  // 要件4: 個別入力欄は既存グループ選択のみ（新規グループ作成はグループ階層管理ページへ統合）
+  $("btnAddMember").addEventListener("click", async () => {
+    if (!activeProjectId) return;
+    const name = $("inpName").value.trim();
+    if (!name) return alert("参加者名を入力してください");
+    const enabled = Boolean(currentProject?.groupEnabled);
+    const tree = buildHierarchyTree(currentProject, members);
+
+    let h = { smallGroup: "", mediumGroup: "", largeGroup: "" };
+    if (enabled) {
+      const chosenGrp = $("selGroupSimple").value.trim();
+      h = resolveByGroupName(chosenGrp, tree);
+    }
+
+    const note = $("inpNote").value.trim();
+    const id = "m_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+
+    $("inpName").value = "";
+    $("inpNote").value = "";
+
+    setSyncState("saving", "保存中...");
+    try {
+      await setDoc(doc(db, "projects", activeProjectId, "members", id), {
+        name,
+        mark: selectedMark,
+        smallGroup: h.smallGroup,
+        mediumGroup: h.mediumGroup,
+        largeGroup: h.largeGroup,
+        group: getPrimaryGroupName(h),
+        note,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      });
+      setSyncState("ok", "自動保存済");
+    } catch (err) {
+      console.error(err);
+      setSyncState("error", "保存エラー");
+      alert("保存に失敗しました。");
+    }
+  });
+
+  $("btnExpandAll").addEventListener("click", () => {
+    document.querySelectorAll("#groupedMemberList details.group-box").forEach((d) => { d.open = true; });
+  });
+  $("btnCollapseAll").addEventListener("click", () => {
+    document.querySelectorAll("#groupedMemberList details.group-box").forEach((d) => { d.open = false; });
+  });
+
+  document.querySelectorAll(".stat[data-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      statusFilter = btn.dataset.filter;
+      document.querySelectorAll(".stat[data-filter]").forEach((b) => b.classList.toggle("active", b === btn));
+      renderMembers();
+    });
+  });
+  $("searchName").addEventListener("input", renderMembers);
+  $("filterGroupSimple").addEventListener("change", renderMembers);
+  $("sortMembersBy").addEventListener("change", renderMembers);
+
+  document.querySelectorAll(".tab[data-tab]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab[data-tab]").forEach((t) => t.classList.toggle("active", t === tab));
+      const isBulk = tab.dataset.tab === "bulk";
+      $("tabSingle").classList.toggle("hidden", isBulk);
+      $("tabBulk").classList.toggle("hidden", !isBulk);
+    });
+  });
+
+  function parseTextLine(line) {
+    const cleanLine = String(line ?? "").replace(/\uFE0F/g, "").trim();
+    if (!cleanLine) return null;
+
+    const tokenPattern = /(不参加|欠席|参加|出席|未定|調整中|⭕|❌|〇|○|◯|×|✕|✖|△|▲)/;
+    const match = tokenPattern.exec(cleanLine);
+
+    if (match) {
+      const markStr = match[0];
+      const beforeMark = cleanLine.slice(0, match.index).replace(/[\s\t ]+$/g, "").trim();
+      const name = beforeMark || cleanLine.slice(match.index + markStr.length).replace(/^[\s\t ]+/g, "").trim();
+      if (!name) return null;
+
+      const mark = normalizeMarkToken(markStr) || "△";
+      return {
+        name,
+        mark,
+        group: "",
+        smallGroup: "",
+        mediumGroup: "",
+        largeGroup: "",
+        note: ""
+      };
+    }
+
+    const spaceSplit = cleanLine.match(/^([^\s\t ]+)([\s\t ]+)(.*)$/);
+    const name = spaceSplit ? spaceSplit[1].trim() : cleanLine;
+    if (!name) return null;
+
+    return {
+      name,
+      mark: "△",
+      group: "",
+      smallGroup: "",
+      mediumGroup: "",
+      largeGroup: "",
+      note: ""
+    };
+  }
+
+  function parseTextBulk(rawText) {
+    return String(rawText || "")
+      .split(/\r?\n/)
+      .map(parseTextLine)
+      .filter(Boolean);
+  }
+
+  function parseExcelRowsToRecords(rows) {
+    const enabled = Boolean(currentProject?.groupEnabled);
+    const records = [];
+    rows.forEach((cols) => {
+      const cells = cols.map((c) => String(c ?? "").trim());
+      if (!cells.some(Boolean)) return;
+      if (["名前", "氏名", "name"].includes(cells[0].toLowerCase())) return;
+      const name = cells[0];
+      if (!name) return;
+      const mark = normalizeMark(cells[1]);
+      const p = enabled ? parseLegacyPath(cells[2] || "") : { smallGroup: "", mediumGroup: "", largeGroup: "" };
+      const note = enabled ? (cells[3] || "") : (cells[2] || cells[3] || "");
+      records.push({
+        name,
+        mark,
+        smallGroup: p.smallGroup,
+        mediumGroup: p.mediumGroup,
+        largeGroup: p.largeGroup,
+        group: getPrimaryGroupName(p),
+        note
+      });
+    });
+    return records;
+  }
+
+  async function applyBulkRecords(records, mode, { mergeGroups = false } = {}) {
+    if (!activeProjectId) return;
+    if (!records.length) return alert("取り込むデータが見つかりませんでした。");
+
+    setSyncState("saving", "一括反映中...");
+    try {
+      const batch = writeBatch(db);
+      const membersCol = collection(db, "projects", activeProjectId, "members");
+      const now = Date.now();
+      const tree = buildHierarchyTree(currentProject, members);
+      const nextTree = {
+        smallGroups: [...tree.smallGroups],
+        midGroups: [...tree.midGroups],
+        largeGroups: [...tree.largeGroups],
+        smallToMid: { ...tree.smallToMid },
+        midToLarge: { ...tree.midToLarge }
+      };
+
+      const registerRecordGroup = (r) => {
+        if (!mergeGroups) return;
+        if (r.smallGroup && !nextTree.smallGroups.includes(r.smallGroup)) nextTree.smallGroups.push(r.smallGroup);
+        if (r.mediumGroup && !nextTree.midGroups.includes(r.mediumGroup)) nextTree.midGroups.push(r.mediumGroup);
+        if (r.largeGroup && !nextTree.largeGroups.includes(r.largeGroup)) nextTree.largeGroups.push(r.largeGroup);
+        if (r.smallGroup && r.mediumGroup && !nextTree.smallToMid[r.smallGroup]) nextTree.smallToMid[r.smallGroup] = r.mediumGroup;
+        if (r.mediumGroup && r.largeGroup && !nextTree.midToLarge[r.mediumGroup]) nextTree.midToLarge[r.mediumGroup] = r.largeGroup;
+      };
+
+      if (mode === "replace") {
+        members.forEach((m) => batch.delete(doc(membersCol, m.id)));
+        records.forEach((r, i) => {
+          const id = "m_" + (now + i).toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+          registerRecordGroup(r);
+          batch.set(doc(membersCol, id), { ...r, createdAt: now + i, updatedAt: now + i });
+        });
+      } else if (mode === "append") {
+        records.forEach((r, i) => {
+          const id = "m_" + (now + i).toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+          registerRecordGroup(r);
+          batch.set(doc(membersCol, id), { ...r, createdAt: now + i, updatedAt: now + i });
+        });
+      } else {
+        const existingByName = new Map(members.map((m) => [m.name.trim(), m]));
+        records.forEach((r, i) => {
+          registerRecordGroup(r);
+          const found = existingByName.get(r.name.trim());
+          if (found) {
+            const patch = mergeGroups
+              ? { ...r, updatedAt: now + i }
+              : { name: r.name, mark: r.mark, updatedAt: now + i };
+            batch.update(doc(membersCol, found.id), patch);
+          } else {
+            const id = "m_" + (now + i).toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+            batch.set(doc(membersCol, id), { ...r, createdAt: now + i, updatedAt: now + i });
+          }
+        });
+      }
+
+      if (currentProject?.groupEnabled && mergeGroups) {
+        batch.update(doc(db, "projects", activeProjectId), { hierarchyTree: nextTree });
+      }
+
+      await batch.commit();
+      setSyncState("ok", "自動保存済");
+      alert(`${records.length}件のデータを反映しました。`);
+    } catch (err) {
+      console.error(err);
+      setSyncState("error", "一括反映エラー");
+      alert("一括反映に失敗しました。");
+    }
+  }
+
+  $("btnApplyBulk").addEventListener("click", async () => {
+    const raw = $("bulkText").value.trim();
+    if (!raw) return alert("テキストを入力してください。");
+    const records = parseTextBulk(raw);
+    await applyBulkRecords(records, $("bulkMode").value, { mergeGroups: false });
+  });
+
+  async function handleFile(file) {
+    if (!file || typeof XLSX === "undefined") return;
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const firstSheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+    const records = parseExcelRowsToRecords(rows);
+    await applyBulkRecords(records, $("bulkMode").value, { mergeGroups: true });
+  }
+
+  $("fileInput").addEventListener("change", (e) => {
+    if (e.target.files?.[0]) handleFile(e.target.files[0]);
+    e.target.value = "";
+  });
+
+  const dz = $("dropzone");
+  dz.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dz.style.borderColor = "var(--primary)";
+  });
+  dz.addEventListener("dragleave", () => {
+    dz.style.borderColor = "#cbd5e1";
+  });
+  dz.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dz.style.borderColor = "#cbd5e1";
+    if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0]);
+  });
+
+  $("btnCopyShareLink").addEventListener("click", () => {
+    const url = isProjectScoped ? getProjectUrl(activeProjectId) : location.href;
+    navigator.clipboard?.writeText(url);
+    alert("共有リンクをコピーしました。");
+  });
+
+  renderHeader();
+
+  if (isProjectScoped) {
+    onSnapshot(doc(db, "projects", activeProjectId), (snap) => {
+      if (snap.exists()) {
+        currentProject = { id: snap.id, ...snap.data() };
+        setSyncState("ok", "自動保存済");
+      } else {
+        currentProject = null;
+        setSyncState("error", "データなし");
+      }
+      renderHeader();
+      renderMembers();
+    }, (err) => {
+      console.error(err);
+      setSyncState("error", "接続エラー");
+    });
+
+    const qMembers = query(collection(db, "projects", activeProjectId, "members"), orderBy("createdAt", "asc"));
+    onSnapshot(qMembers, (snap) => {
+      members = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setSyncState("ok", "自動保存済");
+      renderMembers();
+    }, (err) => {
+      console.error(err);
+      setSyncState("error", "読込エラー");
+    });
+  } else {
+    const qProjects = query(collection(db, "projects"), orderBy("createdAt", "desc"));
+    onSnapshot(qProjects, (snap) => {
+      projects = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setSyncState("ok", "自動保存済");
+      renderHeader();
+      renderProjects();
+    }, (err) => {
+      console.error(err);
+      setSyncState("error", "接続エラー");
+      $("projectList").innerHTML = `<p class="muted">データの読み込みに失敗しました。</p>`;
+    });
+  }
+</script>
+</body>
+</html>
